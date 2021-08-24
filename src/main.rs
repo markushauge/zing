@@ -6,7 +6,7 @@ use self::settings::Settings;
 use anyhow::Result;
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    StreamConfig, StreamError,
+    Device, Host, StreamConfig, StreamError,
 };
 use effect::EffectNode;
 use graph::{Graph, InputNode, Node};
@@ -14,11 +14,36 @@ use ringbuf::RingBuffer;
 
 const SETTINGS_PATH: &str = "settings.json";
 
+fn find_device(host: &Host, name: &str) -> Option<Device> {
+    for device in host.devices().ok()? {
+        if device.name().ok()?.contains(name) {
+            return Some(device);
+        }
+    }
+
+    None
+}
+
 fn main() -> Result<()> {
     let settings = Settings::read(SETTINGS_PATH)?;
     let host = cpal::default_host();
-    let input = host.default_input_device().unwrap();
-    let output = host.default_output_device().unwrap();
+
+    let input = settings
+        .devices
+        .as_ref()
+        .and_then(|devices| devices.input.as_ref())
+        .and_then(|name| find_device(&host, name))
+        .or_else(|| host.default_input_device())
+        .expect("no input device available");
+
+    let output = settings
+        .devices
+        .as_ref()
+        .and_then(|devices| devices.output.as_ref())
+        .and_then(|name| find_device(&host, name))
+        .or_else(|| host.default_output_device())
+        .expect("no output device available");
+
     let mut config: StreamConfig = input.default_input_config()?.into();
 
     if settings.mono {

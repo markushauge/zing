@@ -5,6 +5,7 @@ use std::path::Path;
 
 #[derive(Deserialize)]
 pub struct Settings {
+    pub devices: Option<Devices>,
     pub mono: bool,
     pub latency: f64,
     pub effects: Vec<Effect>,
@@ -15,6 +16,12 @@ impl Settings {
         let file = File::open(path)?;
         Ok(serde_json::from_reader(file)?)
     }
+}
+
+#[derive(Deserialize)]
+pub struct Devices {
+    pub input: Option<String>,
+    pub output: Option<String>,
 }
 
 #[derive(Deserialize)]
