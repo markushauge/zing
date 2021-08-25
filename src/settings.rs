@@ -34,6 +34,31 @@ pub enum Effect {
 #[derive(Deserialize)]
 #[serde(tag = "type")]
 pub enum Band {
-    LowPass { cutoff_frequency: f32, q: f32 },
-    HighPass { cutoff_frequency: f32, q: f32 },
+    LowPass {
+        frequency: f32,
+        q: f32,
+    },
+    HighPass {
+        frequency: f32,
+        q: f32,
+    },
+    Peaking {
+        frequency: f32,
+        q: f32,
+        gain: f32,
+    },
+    Notch {
+        frequency: f32,
+        q: f32,
+    },
+    LowShelf {
+        frequency: f32,
+        slope: f32,
+        gain: f32,
+    },
+    HighShelf {
+        frequency: f32,
+        slope: f32,
+        gain: f32,
+    },
 }

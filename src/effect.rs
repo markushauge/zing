@@ -55,14 +55,22 @@ pub struct BiQuadFilter {
 impl BiQuadFilter {
     fn from(band: &Band, sample_rate: f32) -> Self {
         match band {
-            Band::LowPass {
-                cutoff_frequency,
-                q,
-            } => Self::low_pass(sample_rate, *cutoff_frequency, *q),
-            Band::HighPass {
-                cutoff_frequency,
-                q,
-            } => Self::high_pass(sample_rate, *cutoff_frequency, *q),
+            Band::LowPass { frequency, q } => Self::low_pass(sample_rate, *frequency, *q),
+            Band::HighPass { frequency, q } => Self::high_pass(sample_rate, *frequency, *q),
+            Band::Peaking { frequency, q, gain } => {
+                Self::peaking(sample_rate, *frequency, *q, *gain)
+            }
+            Band::Notch { frequency, q } => Self::notch(sample_rate, *frequency, *q),
+            Band::LowShelf {
+                frequency,
+                slope,
+                gain,
+            } => Self::low_shelf(sample_rate, *frequency, *slope, *gain),
+            Band::HighShelf {
+                frequency,
+                slope,
+                gain,
+            } => Self::high_shelf(sample_rate, *frequency, *slope, *gain),
         }
     }
 
@@ -81,10 +89,11 @@ impl BiQuadFilter {
         }
     }
 
-    fn low_pass(sample_rate: f32, cutoff_frequency: f32, q: f32) -> Self {
-        let w0 = 2.0 * std::f32::consts::PI * cutoff_frequency / sample_rate;
+    fn low_pass(sample_rate: f32, frequency: f32, q: f32) -> Self {
+        let w0 = 2.0 * std::f32::consts::PI * frequency / sample_rate;
         let cosw0 = w0.cos();
-        let alpha = w0.sin() / (2.0 * q);
+        let sinw0 = w0.sin();
+        let alpha = sinw0 / (2.0 * q);
 
         let aa0 = 1.0 + alpha;
         let aa1 = -2.0 * cosw0;
@@ -96,10 +105,11 @@ impl BiQuadFilter {
         Self::new(aa0, aa1, aa2, b0, b1, b2)
     }
 
-    fn high_pass(sample_rate: f32, cutoff_frequency: f32, q: f32) -> Self {
-        let w0 = 2.0 * std::f32::consts::PI * cutoff_frequency / sample_rate;
+    fn high_pass(sample_rate: f32, frequency: f32, q: f32) -> Self {
+        let w0 = 2.0 * std::f32::consts::PI * frequency / sample_rate;
         let cosw0 = w0.cos();
-        let alpha = w0.sin() / (2.0 * q);
+        let sinw0 = w0.sin();
+        let alpha = sinw0 / (2.0 * q);
 
         let aa0 = 1.0 + alpha;
         let aa1 = -2.0 * cosw0;
@@ -107,6 +117,75 @@ impl BiQuadFilter {
         let b0 = (1.0 + cosw0) / 2.0;
         let b1 = -1.0 - cosw0;
         let b2 = (1.0 + cosw0) / 2.0;
+
+        Self::new(aa0, aa1, aa2, b0, b1, b2)
+    }
+
+    fn peaking(sample_rate: f32, frequency: f32, q: f32, gain: f32) -> Self {
+        let w0 = 2.0 * std::f32::consts::PI * frequency / sample_rate;
+        let cosw0 = w0.cos();
+        let sinw0 = w0.sin();
+        let alpha = sinw0 / (2.0 * q);
+        let a = f32::powf(10.0, gain / 40.0);
+
+        let aa0 = 1.0 + alpha / a;
+        let aa1 = -2.0 * cosw0;
+        let aa2 = 1.0 - alpha / a;
+        let b0 = 1.0 + alpha * a;
+        let b1 = -2.0 * cosw0;
+        let b2 = 1.0 - alpha * a;
+
+        Self::new(aa0, aa1, aa2, b0, b1, b2)
+    }
+
+    fn notch(sample_rate: f32, frequency: f32, q: f32) -> Self {
+        let w0 = 2.0 * std::f32::consts::PI * frequency / sample_rate;
+        let cosw0 = w0.cos();
+        let sinw0 = w0.sin();
+        let alpha = sinw0 / (2.0 * q);
+
+        let aa0 = 1.0 + alpha;
+        let aa1 = -2.0 * cosw0;
+        let aa2 = 1.0 - alpha;
+        let b0 = 1.0;
+        let b1 = -2.0 * cosw0;
+        let b2 = 1.0;
+
+        Self::new(aa0, aa1, aa2, b0, b1, b2)
+    }
+
+    fn low_shelf(sample_rate: f32, frequency: f32, slope: f32, gain: f32) -> Self {
+        let w0 = 2.0 * std::f32::consts::PI * frequency / sample_rate;
+        let cosw0 = w0.cos();
+        let sinw0 = w0.sin();
+        let a = f32::powf(10.0, gain / 40.0);
+        let alpha = sinw0 / 2.0 * ((a + 1.0 / a) * (1.0 / slope - 1.0) + 2.0).sqrt();
+        let temp = 2.0 * a.sqrt() * alpha;
+
+        let aa0 = (a + 1.0) + (a - 1.0) * cosw0 + temp;
+        let aa1 = -2.0 * ((a - 1.0) + (a + 1.0) * cosw0);
+        let aa2 = (a + 1.0) + (a - 1.0) * cosw0 - temp;
+        let b0 = a * ((a + 1.0) - (a - 1.0) * cosw0 + temp);
+        let b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cosw0);
+        let b2 = a * ((a + 1.0) - (a - 1.0) * cosw0 - temp);
+
+        Self::new(aa0, aa1, aa2, b0, b1, b2)
+    }
+
+    fn high_shelf(sample_rate: f32, frequency: f32, slope: f32, gain: f32) -> Self {
+        let w0 = 2.0 * std::f32::consts::PI * frequency / sample_rate;
+        let cosw0 = w0.cos();
+        let sinw0 = w0.sin();
+        let a = f32::powf(10.0, gain / 40.0);
+        let alpha = sinw0 / 2.0 * ((a + 1.0 / a) * (1.0 / slope - 1.0) + 2.0).sqrt();
+        let temp = 2.0 * a.sqrt() * alpha;
+
+        let aa0 = (a + 1.0) - (a - 1.0) * cosw0 + temp;
+        let aa1 = 2.0 * ((a - 1.0) - (a + 1.0) * cosw0);
+        let aa2 = (a + 1.0) - (a - 1.0) * cosw0 - temp;
+        let b0 = a * ((a + 1.0) + (a - 1.0) * cosw0 + temp);
+        let b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cosw0);
+        let b2 = a * ((a + 1.0) + (a - 1.0) * cosw0 - temp);
 
         Self::new(aa0, aa1, aa2, b0, b1, b2)
     }
