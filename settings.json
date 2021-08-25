@@ -1,5 +1,9 @@
 {
-  "mono": true,
   "latency": 32,
-  "effects": [{ "type": "Gain", "gain": 1 }]
+  "effects": [
+    {
+      "type": "Gain",
+      "gain": 1
+    }
+  ]
 }

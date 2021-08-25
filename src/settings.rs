@@ -6,7 +6,6 @@ use std::path::Path;
 #[derive(Deserialize)]
 pub struct Settings {
     pub devices: Option<Devices>,
-    pub mono: bool,
     pub latency: f32,
     pub effects: Vec<Effect>,
 }

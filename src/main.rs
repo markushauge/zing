@@ -55,12 +55,7 @@ fn main() -> Result<()> {
         .or_else(|| host.default_output_device())
         .expect("no output device available");
 
-    let mut config: StreamConfig = input.default_input_config()?.into();
-
-    if settings.mono {
-        config.channels = 1;
-    }
-
+    let config: StreamConfig = input.default_input_config()?.into();
     let sample_rate = config.sample_rate.0 as f32;
     let latency_frames = (settings.latency / 1_000.0) * sample_rate;
     let latency_samples = latency_frames as usize * config.channels as usize;
