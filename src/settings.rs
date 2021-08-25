@@ -7,7 +7,7 @@ use std::path::Path;
 pub struct Settings {
     pub devices: Option<Devices>,
     pub mono: bool,
-    pub latency: f64,
+    pub latency: f32,
     pub effects: Vec<Effect>,
 }
 
@@ -34,6 +34,6 @@ pub enum Effect {
 #[derive(Deserialize)]
 #[serde(tag = "type")]
 pub enum Band {
-    LowPass { cutoff_frequency: f64, q: f64 },
-    HighPass { cutoff_frequency: f64, q: f64 },
+    LowPass { cutoff_frequency: f32, q: f32 },
+    HighPass { cutoff_frequency: f32, q: f32 },
 }

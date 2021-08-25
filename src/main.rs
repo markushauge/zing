@@ -50,7 +50,7 @@ fn main() -> Result<()> {
         config.channels = 1;
     }
 
-    let sample_rate = config.sample_rate.0 as f64;
+    let sample_rate = config.sample_rate.0 as f32;
     let latency_frames = (settings.latency / 1_000.0) * sample_rate;
     let latency_samples = latency_frames as usize * config.channels as usize;
     let (mut producer, consumer) = RingBuffer::new(latency_samples * 2).split();

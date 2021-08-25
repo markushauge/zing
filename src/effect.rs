@@ -7,7 +7,7 @@ pub enum EffectNode {
 }
 
 impl EffectNode {
-    pub fn from(effect: &Effect, sample_rate: f64) -> Self {
+    pub fn from(effect: &Effect, sample_rate: f32) -> Self {
         match effect {
             Effect::Gain { gain } => EffectNode::Gain(*gain),
             Effect::Equalizer { bands } => EffectNode::Equalizer(
@@ -39,11 +39,11 @@ impl Node for EffectNode {
 
 pub struct BiQuadFilter {
     // Coefficients
-    a0: f64,
-    a1: f64,
-    a2: f64,
-    a3: f64,
-    a4: f64,
+    a0: f32,
+    a1: f32,
+    a2: f32,
+    a3: f32,
+    a4: f32,
 
     // State
     x1: f32,
@@ -53,7 +53,7 @@ pub struct BiQuadFilter {
 }
 
 impl BiQuadFilter {
-    fn from(band: &Band, sample_rate: f64) -> Self {
+    fn from(band: &Band, sample_rate: f32) -> Self {
         match band {
             Band::LowPass {
                 cutoff_frequency,
@@ -66,7 +66,7 @@ impl BiQuadFilter {
         }
     }
 
-    fn new(aa0: f64, aa1: f64, aa2: f64, b0: f64, b1: f64, b2: f64) -> Self {
+    fn new(aa0: f32, aa1: f32, aa2: f32, b0: f32, b1: f32, b2: f32) -> Self {
         Self {
             a0: b0 / aa0,
             a1: b1 / aa0,
@@ -81,8 +81,8 @@ impl BiQuadFilter {
         }
     }
 
-    fn low_pass(sample_rate: f64, cutoff_frequency: f64, q: f64) -> Self {
-        let w0 = 2.0 * std::f64::consts::PI * cutoff_frequency / sample_rate;
+    fn low_pass(sample_rate: f32, cutoff_frequency: f32, q: f32) -> Self {
+        let w0 = 2.0 * std::f32::consts::PI * cutoff_frequency / sample_rate;
         let cosw0 = w0.cos();
         let alpha = w0.sin() / (2.0 * q);
 
@@ -96,8 +96,8 @@ impl BiQuadFilter {
         Self::new(aa0, aa1, aa2, b0, b1, b2)
     }
 
-    fn high_pass(sample_rate: f64, cutoff_frequency: f64, q: f64) -> Self {
-        let w0 = 2.0 * std::f64::consts::PI * cutoff_frequency / sample_rate;
+    fn high_pass(sample_rate: f32, cutoff_frequency: f32, q: f32) -> Self {
+        let w0 = 2.0 * std::f32::consts::PI * cutoff_frequency / sample_rate;
         let cosw0 = w0.cos();
         let alpha = w0.sin() / (2.0 * q);
 
@@ -114,18 +114,24 @@ impl BiQuadFilter {
 
 impl Node for BiQuadFilter {
     fn read(&mut self, buffer: &mut [f32]) {
+        let BiQuadFilter {
+            a0,
+            a1,
+            a2,
+            a3,
+            a4,
+            x1,
+            x2,
+            y1,
+            y2,
+        } = self;
+
         for sample in buffer {
-            let result =
-                self.a0 as f32 * *sample + self.a1 as f32 * self.x1 + self.a2 as f32 * self.x2
-                    - self.a3 as f32 * self.y1
-                    - self.a4 as f32 * self.y2;
-
-            self.x2 = self.x1;
-            self.x1 = *sample;
-
-            self.y2 = self.y1;
-            self.y1 = result;
-
+            let result = *a0 * *sample + *a1 * *x1 + *a2 * *x2 - *a3 * *y1 - *a4 * *y2;
+            *x2 = *x1;
+            *x1 = *sample;
+            *y2 = *y1;
+            *y1 = result;
             *sample = result;
         }
     }
