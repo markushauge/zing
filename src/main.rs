@@ -15,8 +15,18 @@ use std::{thread, time::Duration};
 
 const SETTINGS_PATH: &str = "settings.json";
 
-fn find_device(host: &Host, name: &str) -> Option<Device> {
-    for device in host.devices().ok()? {
+fn find_input_device(host: &Host, name: &str) -> Option<Device> {
+    for device in host.input_devices().ok()? {
+        if device.name().ok()?.contains(name) {
+            return Some(device);
+        }
+    }
+
+    None
+}
+
+fn find_output_device(host: &Host, name: &str) -> Option<Device> {
+    for device in host.output_devices().ok()? {
         if device.name().ok()?.contains(name) {
             return Some(device);
         }
@@ -33,7 +43,7 @@ fn main() -> Result<()> {
         .devices
         .as_ref()
         .and_then(|devices| devices.input.as_ref())
-        .and_then(|name| find_device(&host, name))
+        .and_then(|name| find_input_device(&host, name))
         .or_else(|| host.default_input_device())
         .expect("no input device available");
 
@@ -41,7 +51,7 @@ fn main() -> Result<()> {
         .devices
         .as_ref()
         .and_then(|devices| devices.output.as_ref())
-        .and_then(|name| find_device(&host, name))
+        .and_then(|name| find_output_device(&host, name))
         .or_else(|| host.default_output_device())
         .expect("no output device available");
 
