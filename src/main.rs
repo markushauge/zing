@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod effect;
 mod graph;
 mod settings;
