@@ -1,5 +1,10 @@
 # ✨ Zing
 
-> 🎙 Make your mic pop, the good way!
+Zing is a simple audio effect processor. It provides an EQ, compressor, de-esser and noise gate out of the box. BYO virtual audio driver.
 
-Zing is a simple audio processor that covers your basic needs. It provides an EQ, compressor, de-esser and noise gate out of the box.
+## macOS
+- BlackHole
+- Soundflower
+
+## Windows
+- VB-CABLE
