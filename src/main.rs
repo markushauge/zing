@@ -11,6 +11,7 @@ use cpal::{
 use effect::EffectNode;
 use graph::{Graph, InputNode, Node};
 use ringbuf::RingBuffer;
+use std::{thread, time::Duration};
 
 const SETTINGS_PATH: &str = "settings.json";
 
@@ -89,6 +90,6 @@ fn main() -> Result<()> {
     output_stream.play()?;
 
     loop {
-        std::thread::yield_now();
+        thread::sleep(Duration::from_secs(1));
     }
 }
