@@ -62,14 +62,11 @@ fn main() -> Result<()> {
     let latency_frames = (settings.latency / 1_000.0) * sample_rate;
     let latency_samples = latency_frames as usize * config.channels as usize;
     let (mut producer, consumer) = RingBuffer::new(latency_samples * 2).split();
-
-    for _ in 0..latency_samples {
-        producer.push(0.0).unwrap();
-    }
+    producer.push_iter(&mut std::iter::repeat(0.0).take(latency_samples));
 
     let input_callback = move |buffer: &[f32], _: &cpal::InputCallbackInfo| {
-        for &sample in buffer {
-            producer.push(sample).unwrap();
+        if producer.push_slice(buffer) < buffer.len() {
+            eprintln!("Output stream fell behind");
         }
     };
 

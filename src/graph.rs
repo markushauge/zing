@@ -16,8 +16,8 @@ impl InputNode {
 
 impl Node for InputNode {
     fn read(&mut self, buffer: &mut [f32]) {
-        for sample in buffer.iter_mut() {
-            *sample = self.consumer.pop().unwrap();
+        if self.consumer.pop_slice(buffer) < buffer.len() {
+            eprintln!("Input stream fell behind");
         }
     }
 }
