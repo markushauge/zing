@@ -57,6 +57,9 @@ fn main() -> Result<()> {
         .or_else(|| host.default_output_device())
         .expect("no output device available");
 
+    println!("Input: {}", input.name()?);
+    println!("Output: {}", output.name()?);
+
     let config: StreamConfig = input.default_input_config()?.into();
     let sample_rate = config.sample_rate.0 as f32;
     let latency_frames = (settings.latency / 1_000.0) * sample_rate;
