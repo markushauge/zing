@@ -17,6 +17,16 @@ impl Settings {
     }
 }
 
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            devices: None,
+            latency: 256.0,
+            effects: Vec::new(),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub struct Devices {
     pub input: Option<String>,

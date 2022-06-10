@@ -38,7 +38,7 @@ fn find_output_device(host: &Host, name: &str) -> Option<Device> {
 }
 
 fn main() -> Result<()> {
-    let settings = Settings::read(SETTINGS_PATH)?;
+    let settings = Settings::read(SETTINGS_PATH).unwrap_or_default();
     let host = cpal::default_host();
 
     let input = settings

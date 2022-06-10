@@ -1,9 +1,0 @@
-{
-  "latency": 32,
-  "effects": [
-    {
-      "type": "Gain",
-      "gain": 1
-    }
-  ]
-}
