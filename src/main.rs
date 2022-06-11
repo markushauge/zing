@@ -125,7 +125,7 @@ impl eframe::App for App {
 }
 
 fn main() -> Result<()> {
-    let settings = settings::Settings::read(SETTINGS_PATH)?;
+    let settings = settings::Settings::read(SETTINGS_PATH).unwrap_or_default();
     let effects = vec![Effect::Gain { volume: 1.0 }];
 
     let audio = Audio::new(settings.latency);
