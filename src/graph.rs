@@ -39,6 +39,18 @@ where
     pub fn new(input: I, nodes: Vec<N>) -> Self {
         Self { input, nodes }
     }
+
+    pub fn add_node(&mut self, node: N) {
+        self.nodes.push(node);
+    }
+
+    pub fn remove_node(&mut self, id: usize) {
+        self.nodes.remove(id);
+    }
+
+    pub fn node(&mut self, id: usize) -> &mut N {
+        &mut self.nodes[id]
+    }
 }
 
 impl<I, N> Node for Graph<I, N>

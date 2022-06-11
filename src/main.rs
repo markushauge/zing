@@ -1,102 +1,147 @@
 #![windows_subsystem = "windows"]
 
+mod audio;
 mod effect;
 mod graph;
 mod settings;
 
-use self::settings::Settings;
 use anyhow::Result;
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Host, StreamConfig, StreamError,
-};
-use effect::EffectNode;
-use graph::{Graph, InputNode, Node};
-use ringbuf::RingBuffer;
-use std::{thread, time::Duration};
+use audio::{Audio, AudioSession, Message};
+use effect::{Effect, EffectMessage};
+use eframe::egui;
 
 const SETTINGS_PATH: &str = "settings.json";
 
-fn find_input_device(host: &Host, name: &str) -> Option<Device> {
-    for device in host.input_devices().ok()? {
-        if device.name().ok()?.contains(name) {
-            return Some(device);
-        }
-    }
-
-    None
+struct App {
+    audio: Audio,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+    effects: Vec<Effect>,
+    selected_input: Option<String>,
+    selected_output: Option<String>,
+    session: Option<AudioSession>,
 }
 
-fn find_output_device(host: &Host, name: &str) -> Option<Device> {
-    for device in host.output_devices().ok()? {
-        if device.name().ok()?.contains(name) {
-            return Some(device);
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let effects = &mut self.effects;
+        let inputs = &self.inputs;
+        let outputs = &self.outputs;
+        let selected_input = &mut self.selected_input;
+        let selected_output = &mut self.selected_output;
+        let session = &mut self.session;
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::ComboBox::from_label("Input")
+                .selected_text(selected_input.as_deref().unwrap_or(""))
+                .show_ui(ui, |ui| {
+                    for input in inputs {
+                        if ui
+                            .selectable_label(
+                                Some(input.as_str()) == selected_input.as_deref(),
+                                input,
+                            )
+                            .clicked()
+                        {
+                            *selected_input = Some(input.clone())
+                        };
+                    }
+                });
+
+            egui::ComboBox::from_label("Output")
+                .selected_text(selected_output.as_deref().unwrap_or(""))
+                .show_ui(ui, |ui| {
+                    for output in outputs {
+                        if ui
+                            .selectable_label(
+                                Some(output.as_str()) == selected_output.as_deref(),
+                                output,
+                            )
+                            .clicked()
+                        {
+                            *selected_output = Some(output.clone())
+                        };
+                    }
+                });
+
+            ui.separator();
+
+            for (id, effect) in effects.iter_mut().enumerate() {
+                if id > 0 {
+                    ui.separator();
+                }
+
+                match effect {
+                    Effect::Gain { volume } => {
+                        egui::CollapsingHeader::new("Gain")
+                            .id_source(id)
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                if ui.add(egui::Slider::new(volume, 0.0..=4.0)).changed() {
+                                    if let Some(session) = session {
+                                        session.dispatch(Message::Update {
+                                            id,
+                                            message: EffectMessage::UpdateGain { volume: *volume },
+                                        });
+                                    }
+                                }
+                            });
+                    }
+                    _ => {}
+                }
+            }
+
+            if ui.button("Add").clicked() {
+                let effect = Effect::Gain { volume: 1.0 };
+                effects.push(effect.clone());
+
+                if let Some(session) = session {
+                    session.dispatch(Message::Add { effect });
+                }
+            }
+
+            if ui.button("Remove").clicked() {
+                let id = effects.len() - 1;
+                effects.remove(id);
+
+                if let Some(session) = session {
+                    session.dispatch(Message::Remove { id });
+                }
+            }
+        });
+
+        match (session, selected_input, selected_output) {
+            (None, Some(input), Some(output)) => {
+                self.session = Some(self.audio.session(input, output, &self.effects).unwrap());
+            }
+            (Some(session), Some(input), Some(output))
+                if &session.input().unwrap() != input || &session.output().unwrap() != output =>
+            {
+                self.session = Some(self.audio.session(input, output, &self.effects).unwrap());
+            }
+            _ => {}
         }
     }
-
-    None
 }
 
 fn main() -> Result<()> {
-    let settings = Settings::read(SETTINGS_PATH).unwrap_or_default();
-    let host = cpal::default_host();
+    let settings = settings::Settings::read(SETTINGS_PATH)?;
+    let effects = vec![Effect::Gain { volume: 1.0 }];
 
-    let input = settings
-        .devices
-        .as_ref()
-        .and_then(|devices| devices.input.as_ref())
-        .and_then(|name| find_input_device(&host, name))
-        .or_else(|| host.default_input_device())
-        .expect("no input device available");
+    let audio = Audio::new(settings.latency);
+    let outputs = audio.outputs()?;
+    let inputs = audio.inputs()?;
 
-    let output = settings
-        .devices
-        .as_ref()
-        .and_then(|devices| devices.output.as_ref())
-        .and_then(|name| find_output_device(&host, name))
-        .or_else(|| host.default_output_device())
-        .expect("no output device available");
-
-    println!("Input: {}", input.name()?);
-    println!("Output: {}", output.name()?);
-
-    let config: StreamConfig = input.default_input_config()?.into();
-    let sample_rate = config.sample_rate.0 as f32;
-    let latency_frames = (settings.latency / 1_000.0) * sample_rate;
-    let latency_samples = latency_frames as usize * config.channels as usize;
-    let (mut producer, consumer) = RingBuffer::new(latency_samples * 2).split();
-    producer.push_iter(&mut std::iter::repeat(0.0).take(latency_samples));
-
-    let input_callback = move |buffer: &[f32], _: &cpal::InputCallbackInfo| {
-        if producer.push_slice(buffer) < buffer.len() {
-            eprintln!("Output stream fell behind");
-        }
+    let app = App {
+        audio,
+        outputs,
+        inputs,
+        effects,
+        selected_input: None,
+        selected_output: None,
+        session: None,
     };
 
-    let effect_nodes: Vec<_> = settings
-        .effects
-        .iter()
-        .map(|e| EffectNode::from(e, sample_rate))
-        .collect();
-
-    let input_node = InputNode::new(consumer);
-    let mut graph = Graph::new(input_node, effect_nodes);
-
-    let output_callback = move |buffer: &mut [f32], _: &cpal::OutputCallbackInfo| {
-        graph.read(buffer);
-    };
-
-    let err_callback = |err: StreamError| {
-        eprintln!("an error occurred on stream: {}", err);
-    };
-
-    let input_stream = input.build_input_stream(&config, input_callback, err_callback)?;
-    let output_stream = output.build_output_stream(&config, output_callback, err_callback)?;
-
-    input_stream.play()?;
-    output_stream.play()?;
-
-    loop {
-        thread::sleep(Duration::from_secs(1));
-    }
+    let native_options = eframe::NativeOptions::default();
+    eframe::run_native("Zing", native_options, Box::new(|_| Box::new(app)));
 }

@@ -1,5 +1,45 @@
 use super::graph::Node;
-use super::settings::{Band, Effect};
+
+#[derive(Clone)]
+pub enum Band {
+    LowPass {
+        frequency: f32,
+        q: f32,
+    },
+    HighPass {
+        frequency: f32,
+        q: f32,
+    },
+    Peaking {
+        frequency: f32,
+        q: f32,
+        gain: f32,
+    },
+    Notch {
+        frequency: f32,
+        q: f32,
+    },
+    LowShelf {
+        frequency: f32,
+        slope: f32,
+        gain: f32,
+    },
+    HighShelf {
+        frequency: f32,
+        slope: f32,
+        gain: f32,
+    },
+}
+
+#[derive(Clone)]
+pub enum Effect {
+    Gain { volume: f32 },
+    Equalizer { bands: [Band; 6] },
+}
+
+pub enum EffectMessage {
+    UpdateGain { volume: f32 },
+}
 
 pub enum EffectNode {
     Gain(f32),
@@ -9,7 +49,7 @@ pub enum EffectNode {
 impl EffectNode {
     pub fn from(effect: &Effect, sample_rate: f32) -> Self {
         match effect {
-            Effect::Gain { gain } => EffectNode::Gain(*gain),
+            Effect::Gain { volume } => EffectNode::Gain(*volume),
             Effect::Equalizer { bands } => EffectNode::Equalizer(
                 bands
                     .iter()
