@@ -47,21 +47,48 @@ impl Equalizer {
 
         ui.horizontal(|ui| {
             for (id, band) in &mut bands.iter_mut().enumerate() {
-                match band {
-                    Band::Peaking { gain, .. } => {
-                        let slider = egui::Slider::new(gain, -10.0..=10.0)
+                let band_clone = band.clone();
+
+                ui.vertical(|ui| match band {
+                    Band::Peaking { frequency, q, gain } => {
+                        let gain_slider = egui::Slider::new(gain, -10.0..=10.0)
                             .orientation(egui::SliderOrientation::Vertical);
 
-                        if ui.add(slider).changed() {
+                        if ui.add(gain_slider).changed() {
                             if let Some(producer) = producer {
                                 let _ = producer.push(Message::UpdateBand {
                                     id,
-                                    band: band.clone(),
+                                    band: band_clone.clone(),
+                                });
+                            }
+                        }
+
+                        let frequency_drag_value = egui::DragValue::new(frequency)
+                            .clamp_range(0.0..=20_000.0)
+                            .speed(10);
+
+                        if ui.add(frequency_drag_value).changed() {
+                            if let Some(producer) = producer {
+                                let _ = producer.push(Message::UpdateBand {
+                                    id,
+                                    band: band_clone.clone(),
+                                });
+                            }
+                        }
+
+                        let q_drag_value =
+                            egui::DragValue::new(q).clamp_range(0.1..=10.0).speed(0.01);
+
+                        if ui.add(q_drag_value).changed() {
+                            if let Some(producer) = producer {
+                                let _ = producer.push(Message::UpdateBand {
+                                    id,
+                                    band: band_clone.clone(),
                                 });
                             }
                         }
                     }
-                }
+                });
             }
         });
     }
