@@ -1,6 +1,6 @@
 use crate::{
-    effect::{Effect, EffectMessage, EffectNode},
-    graph::{Graph, InputNode, Node},
+    effect::{Effect, EffectNode},
+    graph::{Graph, InputNode, Node, StreamInfo},
 };
 use anyhow::{anyhow, Result};
 use cpal::{
@@ -10,9 +10,8 @@ use cpal::{
 use ringbuf::{Producer, RingBuffer};
 
 pub enum Message {
-    Add { effect: Effect },
+    Add { effect: EffectNode },
     Remove { id: usize },
-    Update { id: usize, message: EffectMessage },
 }
 
 pub struct Audio {
@@ -67,7 +66,12 @@ impl Audio {
             .collect())
     }
 
-    pub fn session(&self, input: &str, output: &str, effects: &[Effect]) -> Result<AudioSession> {
+    pub fn session(
+        &self,
+        input: &str,
+        output: &str,
+        effects: &mut [Effect],
+    ) -> Result<AudioSession> {
         let input = find_input_device(&self.host, input)
             .or_else(|| self.host.default_input_device())
             .ok_or_else(|| anyhow!("no input device available"))?;
@@ -76,7 +80,8 @@ impl Audio {
             .or_else(|| self.host.default_output_device())
             .ok_or_else(|| anyhow!("no output device available"))?;
 
-        let config: StreamConfig = input.default_input_config()?.into();
+        let mut config: StreamConfig = input.default_input_config()?.into();
+        config.channels = 1;
         let sample_rate = config.sample_rate.0 as f32;
         let latency_frames = (self.latency / 1_000.0) * sample_rate;
         let latency_samples = latency_frames as usize * config.channels as usize;
@@ -89,38 +94,21 @@ impl Audio {
             }
         };
 
-        let effect_nodes: Vec<_> = effects
-            .iter()
-            .map(|e| EffectNode::from(e, sample_rate))
-            .collect();
-
         let input_node = InputNode::new(sample_consumer);
+        let effect_nodes: Vec<_> = effects.iter_mut().map(Effect::node).collect();
         let mut graph = Graph::new(input_node, effect_nodes);
-        let (producer, mut consumer) = RingBuffer::new(self.latency as usize).split();
+        let (producer, mut consumer) = RingBuffer::new(10).split();
+        let info = StreamInfo { sample_rate };
 
         let output_callback = move |buffer: &mut [f32], _: &cpal::OutputCallbackInfo| {
-            consumer.pop_each(
-                |m| {
-                    match m {
-                        Message::Add { effect } => {
-                            graph.add_node(EffectNode::from(&effect, sample_rate))
-                        }
-                        Message::Remove { id } => graph.remove_node(id),
-                        Message::Update { id, message } => {
-                            if let (EffectNode::Gain(gain), EffectMessage::UpdateGain { volume }) =
-                                (graph.node(id), message)
-                            {
-                                *gain = volume;
-                            }
-                        }
-                    }
+            while let Some(message) = consumer.pop() {
+                match message {
+                    Message::Add { effect } => graph.add_node(effect),
+                    Message::Remove { id } => graph.remove_node(id),
+                }
+            }
 
-                    true
-                },
-                None,
-            );
-
-            graph.read(buffer);
+            graph.read(buffer, &info);
         };
 
         let err_callback = |err: StreamError| {

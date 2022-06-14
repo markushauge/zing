@@ -7,7 +7,7 @@ mod settings;
 
 use anyhow::Result;
 use audio::{Audio, AudioSession, Message};
-use effect::{Effect, EffectMessage};
+use effect::{create_gain, Band, Effect};
 use eframe::egui;
 
 const SETTINGS_PATH: &str = "settings.json";
@@ -71,53 +71,57 @@ impl eframe::App for App {
                     ui.separator();
                 }
 
-                match effect {
-                    Effect::Gain { volume } => {
-                        egui::CollapsingHeader::new("Gain")
-                            .id_source(id)
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                if ui.add(egui::Slider::new(volume, 0.0..=4.0)).changed() {
-                                    if let Some(session) = session {
-                                        session.dispatch(Message::Update {
-                                            id,
-                                            message: EffectMessage::UpdateGain { volume: *volume },
-                                        });
-                                    }
-                                }
-                            });
+                egui::CollapsingHeader::new(effect.name())
+                    .id_source(id)
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        effect.update(ui);
+                    });
+            }
+
+            ui.separator();
+
+            ui.horizontal(|ui| {
+                if ui.button("Add").clicked() {
+                    let mut gain = create_gain(1.0);
+
+                    if let Some(session) = session {
+                        session.dispatch(Message::Add {
+                            effect: gain.node(),
+                        });
                     }
-                    _ => {}
+
+                    effects.push(gain);
                 }
-            }
 
-            if ui.button("Add").clicked() {
-                let effect = Effect::Gain { volume: 1.0 };
-                effects.push(effect.clone());
+                if ui.button("Remove").clicked() {
+                    let id = effects.len() - 1;
 
-                if let Some(session) = session {
-                    session.dispatch(Message::Add { effect });
+                    if let Some(session) = session {
+                        session.dispatch(Message::Remove { id });
+                    }
+
+                    effects.remove(id);
                 }
-            }
-
-            if ui.button("Remove").clicked() {
-                let id = effects.len() - 1;
-                effects.remove(id);
-
-                if let Some(session) = session {
-                    session.dispatch(Message::Remove { id });
-                }
-            }
+            });
         });
 
         match (session, selected_input, selected_output) {
             (None, Some(input), Some(output)) => {
-                self.session = Some(self.audio.session(input, output, &self.effects).unwrap());
+                self.session = Some(
+                    self.audio
+                        .session(input, output, &mut self.effects)
+                        .unwrap(),
+                );
             }
             (Some(session), Some(input), Some(output))
                 if &session.input().unwrap() != input || &session.output().unwrap() != output =>
             {
-                self.session = Some(self.audio.session(input, output, &self.effects).unwrap());
+                self.session = Some(
+                    self.audio
+                        .session(input, output, &mut self.effects)
+                        .unwrap(),
+                );
             }
             _ => {}
         }
@@ -126,11 +130,50 @@ impl eframe::App for App {
 
 fn main() -> Result<()> {
     let settings = settings::Settings::read(SETTINGS_PATH).unwrap_or_default();
-    let effects = vec![Effect::Gain { volume: 1.0 }];
-
     let audio = Audio::new(settings.latency);
     let outputs = audio.outputs()?;
     let inputs = audio.inputs()?;
+
+    let effects = vec![
+        effect::create_gain(1.0),
+        effect::create_equalizer(vec![
+            Band::Peaking {
+                frequency: 90.0,
+                q: 1.0,
+                gain: 0.0,
+            },
+            Band::Peaking {
+                frequency: 250.0,
+                q: 1.0,
+                gain: 0.0,
+            },
+            Band::Peaking {
+                frequency: 500.0,
+                q: 1.0,
+                gain: 0.0,
+            },
+            Band::Peaking {
+                frequency: 1500.0,
+                q: 1.0,
+                gain: 0.0,
+            },
+            Band::Peaking {
+                frequency: 3000.0,
+                q: 1.0,
+                gain: 0.0,
+            },
+            Band::Peaking {
+                frequency: 5000.0,
+                q: 1.0,
+                gain: 0.0,
+            },
+            Band::Peaking {
+                frequency: 8000.0,
+                q: 1.0,
+                gain: 0.0,
+            },
+        ]),
+    ];
 
     let app = App {
         audio,

@@ -1,7 +1,11 @@
 use ringbuf::Consumer;
 
+pub struct StreamInfo {
+    pub sample_rate: f32,
+}
+
 pub trait Node {
-    fn read(&mut self, buffer: &mut [f32]);
+    fn read(&mut self, buffer: &mut [f32], info: &StreamInfo);
 }
 
 pub struct InputNode {
@@ -15,7 +19,7 @@ impl InputNode {
 }
 
 impl Node for InputNode {
-    fn read(&mut self, buffer: &mut [f32]) {
+    fn read(&mut self, buffer: &mut [f32], _: &StreamInfo) {
         if self.consumer.pop_slice(buffer) < buffer.len() {
             eprintln!("Input stream fell behind");
         }
@@ -47,10 +51,6 @@ where
     pub fn remove_node(&mut self, id: usize) {
         self.nodes.remove(id);
     }
-
-    pub fn node(&mut self, id: usize) -> &mut N {
-        &mut self.nodes[id]
-    }
 }
 
 impl<I, N> Node for Graph<I, N>
@@ -58,11 +58,11 @@ where
     I: Node,
     N: Node,
 {
-    fn read(&mut self, buffer: &mut [f32]) {
-        self.input.read(buffer);
+    fn read(&mut self, buffer: &mut [f32], info: &StreamInfo) {
+        self.input.read(buffer, info);
 
         for node in &mut self.nodes {
-            node.read(buffer);
+            node.read(buffer, info);
         }
     }
 }
