@@ -96,20 +96,19 @@ impl Equalizer {
 
 impl Node for EqualizerNode {
     fn read(&mut self, buffer: &mut [f32], info: &StreamInfo) {
-        let filters = match self.filters.as_mut() {
-            Some(filters) => filters,
-            None => self.filters.insert(
-                self.bands
-                    .iter()
-                    .map(|b| BiQuadFilter::new(Coefficients::from(b, info.sample_rate)))
-                    .collect::<Vec<_>>(),
-            ),
-        };
+        let bands = &self.bands;
+
+        let filters = self.filters.get_or_insert_with(|| {
+            bands
+                .iter()
+                .map(|b| BiQuadFilter::new(b.coefficients(info.sample_rate)))
+                .collect::<Vec<_>>()
+        });
 
         while let Some(message) = self.consumer.pop() {
             match message {
                 Message::UpdateBand { id, band } => {
-                    filters[id].coefficients = Coefficients::from(&band, info.sample_rate);
+                    filters[id].coefficients = band.coefficients(info.sample_rate);
                 }
             }
         }
@@ -120,28 +119,9 @@ impl Node for EqualizerNode {
     }
 }
 
-#[derive(Debug)]
-struct Coefficients {
-    a0: f32,
-    a1: f32,
-    a2: f32,
-    a3: f32,
-    a4: f32,
-}
-
-impl Coefficients {
-    fn new(aa0: f32, aa1: f32, aa2: f32, b0: f32, b1: f32, b2: f32) -> Self {
-        Self {
-            a0: b0 / aa0,
-            a1: b1 / aa0,
-            a2: b2 / aa0,
-            a3: aa1 / aa0,
-            a4: aa2 / aa0,
-        }
-    }
-
-    fn from(band: &Band, sample_rate: f32) -> Self {
-        match band {
+impl Band {
+    fn coefficients(&self, sample_rate: f32) -> [f32; 5] {
+        match self {
             Band::Peaking { frequency, q, gain } => {
                 let w0 = 2.0 * std::f32::consts::PI * frequency / sample_rate;
                 let cosw0 = w0.cos();
@@ -156,34 +136,22 @@ impl Coefficients {
                 let b1 = -2.0 * cosw0;
                 let b2 = 1.0 - alpha * a;
 
-                Self::new(aa0, aa1, aa2, b0, b1, b2)
+                [b0 / aa0, b1 / aa1, b2 / aa2, aa1 / aa0, aa2 / aa0]
             }
         }
     }
 }
 
-struct State {
-    x1: f32,
-    x2: f32,
-    y1: f32,
-    y2: f32,
-}
-
 struct BiQuadFilter {
-    coefficients: Coefficients,
-    state: State,
+    coefficients: [f32; 5],
+    state: [f32; 4],
 }
 
 impl BiQuadFilter {
-    fn new(coefficients: Coefficients) -> Self {
+    fn new(coefficients: [f32; 5]) -> Self {
         Self {
             coefficients,
-            state: State {
-                x1: 0.0,
-                x2: 0.0,
-                y1: 0.0,
-                y2: 0.0,
-            },
+            state: Default::default(),
         }
     }
 }
@@ -191,8 +159,8 @@ impl BiQuadFilter {
 impl Node for BiQuadFilter {
     fn read(&mut self, buffer: &mut [f32], _: &StreamInfo) {
         let BiQuadFilter {
-            coefficients: Coefficients { a0, a1, a2, a3, a4 },
-            state: State { x1, x2, y1, y2 },
+            coefficients: [a0, a1, a2, a3, a4],
+            state: [x1, x2, y1, y2],
         } = self;
 
         for sample in buffer {
